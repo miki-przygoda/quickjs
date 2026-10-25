@@ -547,6 +547,14 @@ JS_EXTERN JSContext *JS_NewContextRaw(JSRuntime *rt);
 JS_EXTERN int JS_AddIntrinsicBaseObjects(JSContext *ctx);
 JS_EXTERN int JS_AddIntrinsicDate(JSContext *ctx);
 JS_EXTERN int JS_AddIntrinsicEval(JSContext *ctx);
+/* Turn off compiling source text in ctx: after this call, eval (direct
+   and indirect), Function and the AsyncFunction, GeneratorFunction and
+   AsyncGeneratorFunction constructors throw a TypeError, and so does
+   JS_Eval on ctx. Functions and modules compiled before the call (for
+   example with JS_EVAL_FLAG_COMPILE_ONLY) still run with JS_EvalFunction.
+   Other contexts in the same runtime are not affected. JS code cannot undo
+   it; only the host can, by calling JS_AddIntrinsicEval again. */
+JS_EXTERN void JS_DisableEval(JSContext *ctx);
 JS_EXTERN void JS_AddIntrinsicRegExpCompiler(JSContext *ctx);
 JS_EXTERN int JS_AddIntrinsicRegExp(JSContext *ctx);
 JS_EXTERN int JS_AddIntrinsicJSON(JSContext *ctx);

@@ -2159,6 +2159,73 @@ void new_typed_array(void)
     JS_FreeRuntime(rt);
 }
 
+// JS_DisableEval() turns off compiling source text in one context: a script
+// compiled before the call still runs, but nothing it does can turn a string
+// into code, the host can't JS_Eval() on that context any more, and other
+// contexts are unaffected.
+static void disable_eval(void)
+{
+    static const char script[] =
+        "var results = [];\n"
+        "function probe(f) {\n"
+        "    try {\n"
+        "        f();\n"
+        "        results.push('no error');\n"
+        "    } catch (e) {\n"
+        "        var ok = e instanceof TypeError &&\n"
+        "                 e.message === 'eval is not supported';\n"
+        "        results.push(ok ? 'ok' : String(e));\n"
+        "    }\n"
+        "}\n"
+        "probe(() => eval('1'));\n"
+        "probe(() => eval(...['1']));\n"
+        "probe(() => (0, eval)('1'));\n"
+        "probe(() => new Function('return 1'));\n"
+        "probe(() => Function('return 1'));\n"
+        "probe(() => new (Object.getPrototypeOf(async function(){}).constructor)('return 1'));\n"
+        "probe(() => new (Object.getPrototypeOf(function*(){}).constructor)('yield 1'));\n"
+        "probe(() => new (Object.getPrototypeOf(async function*(){}).constructor)('yield 1'));\n"
+        "results.join(',');\n";
+    const char *s;
+    JSValue obj, ret, exc, msg;
+
+    JSRuntime *rt = new_runtime();
+    JSContext *ctx = JS_NewContext(rt);
+    obj = JS_Eval(ctx, script, strlen(script), "<input>",
+                  JS_EVAL_TYPE_GLOBAL|JS_EVAL_FLAG_COMPILE_ONLY);
+    assert(!JS_IsException(obj));
+    JS_DisableEval(ctx);
+    ret = JS_EvalFunction(ctx, obj);
+    assert(!JS_IsException(ret));
+    assert(JS_IsString(ret));
+    s = JS_ToCString(ctx, ret);
+    assert(s);
+    assert(!strcmp(s, "ok,ok,ok,ok,ok,ok,ok,ok"));
+    JS_FreeCString(ctx, s);
+    JS_FreeValue(ctx, ret);
+    // the host can't compile on this context either
+    ret = eval(ctx, "1+1");
+    assert(JS_IsException(ret));
+    exc = JS_GetException(ctx);
+    assert(JS_IsError(exc));
+    msg = JS_GetPropertyStr(ctx, exc, "message");
+    s = JS_ToCString(ctx, msg);
+    assert(s);
+    assert(!strcmp(s, "eval is not supported"));
+    JS_FreeCString(ctx, s);
+    JS_FreeValue(ctx, msg);
+    JS_FreeValue(ctx, exc);
+    // a new context in the same runtime still compiles
+    JSContext *ctx2 = JS_NewContext(rt);
+    ret = eval(ctx2, "eval('1') + Function('return 1')()");
+    assert(!JS_IsException(ret));
+    assert(JS_VALUE_GET_TAG(ret) == JS_TAG_INT);
+    assert(JS_VALUE_GET_INT(ret) == 2);
+    JS_FreeContext(ctx2);
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+}
+
 int main(void)
 {
     cfunctions();
@@ -2199,5 +2266,6 @@ int main(void)
     add_intrinsic_bigint();
     new_typed_array();
     std_eval_interrupt_handler();
+    disable_eval();
     return 0;
 }

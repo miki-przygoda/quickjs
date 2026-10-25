@@ -58417,6 +58417,13 @@ int JS_AddIntrinsicEval(JSContext *ctx)
     return 0;
 }
 
+/* every path that compiles source text goes through JS_EvalInternal(),
+   which throws when eval_internal is NULL */
+void JS_DisableEval(JSContext *ctx)
+{
+    ctx->eval_internal = NULL;
+}
+
 /* BigInt */
 
 static JSValue JS_ToBigIntCtorFree(JSContext *ctx, JSValue val)
